@@ -25,14 +25,10 @@ function getNew(name: string, email: string): IUser {
  * Copy a user object.
  * 
  * @param user 
- * @returns 
+ * @returns IUser
  */
 function copy(user: IUser): IUser {
-    return {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-    }
+    return {...user};
 }
 
 

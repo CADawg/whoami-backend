@@ -1,5 +1,4 @@
 import { IUser } from '@models/user-model';
-import { getRandomInt } from '@shared/functions';
 import orm from './mock-orm';
 
 
@@ -10,7 +9,7 @@ import orm from './mock-orm';
  * @param email 
  * @returns 
  */
-async function getOne(email: string): Promise<IUser | null> {
+/*async function getOne(email: string): Promise<IUser | null> {
     const db = await orm.openDb();
     for (const user of db.users) {
         if (user.email === email) {
@@ -18,7 +17,7 @@ async function getOne(email: string): Promise<IUser | null> {
         }
     }
     return null;
-}
+}*/
 
 
 /**
@@ -45,20 +44,6 @@ async function persists(id: number): Promise<boolean> {
 async function getAll(): Promise<IUser[]> {
     const db = await orm.openDb();
     return db.users;
-}
-
-
-/**
- * Add one user.
- * 
- * @param user 
- * @returns 
- */
-async function add(user: IUser): Promise<void> {
-    const db = await orm.openDb();
-    user.id = getRandomInt();
-    db.users.push(user);
-    return orm.saveDb(db);
 }
 
 
@@ -98,10 +83,8 @@ async function deleteOne(id: number): Promise<void> {
 
 // Export default
 export default {
-    getOne,
     persists,
     getAll,
-    add,
     update,
     delete: deleteOne,
 } as const;

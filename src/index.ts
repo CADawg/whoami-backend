@@ -1,5 +1,4 @@
 import './pre-start'; // Must be the first import
-import logger from 'jet-logger';
 import server from './server';
 
 
@@ -9,5 +8,5 @@ const serverStartMsg = 'Express server started on port: ',
 
 // Start server
 server.listen(port, () => {
-    logger.info(serverStartMsg + port);
+    console.info(serverStartMsg + port);
 });
