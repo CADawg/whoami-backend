@@ -60,14 +60,15 @@
     "build.ts"
   ],
   "dependencies": {
+    "@node-rs/argon2": "^1.1.0",
     "cookie-parser": "^1.4.6",
     "dotenv": "^16.0.0",
     "express": "^4.17.2",
     "express-async-errors": "^3.1.1",
     "helmet": "^5.0.2",
-    "jsonfile": "^6.1.0",
     "module-alias": "^2.2.2",
-    "morgan": "^1.10.0"
+    "morgan": "^1.10.0",
+    "mysql2": "^2.3.3"
   },
   "devDependencies": {
     "@types/command-line-args": "^5.2.0",

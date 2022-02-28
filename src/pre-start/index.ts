@@ -10,6 +10,6 @@ import dotenv from 'dotenv';
 
 (() => {
     dotenv.config({
-        path: path.join(__dirname, `env/.env`),
+        path: path.join(__dirname, ".env"),
     })
 })();
