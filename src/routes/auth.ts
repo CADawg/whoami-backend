@@ -34,10 +34,10 @@ loginRouter.post('/sign_in', async (req, res) => {
 
 loginRouter.post('/sign_up', async (req, res) => {
     // Validate that the body contains the required fields
-    if (req.body.username && req.body.password && req.body.email && req.body.encryptedShare) {
+    if (req.body.username && req.body.password && req.body.email && req.body.encryptedShares) {
         // We don't validate as all the validation is done inside the createUserByUsername function
         // This ensures that we can NEVER skip validation
-        const userCreationStatus = await createUserByUsername(req.body.username, req.body.password, req.body.email, req.body.encryptedShare);
+        const userCreationStatus = await createUserByUsername(req.body.username, req.body.password, req.body.email, req.body.encryptedShares);
 
         return res.json({
             success: userCreationStatus === UserCreationStatus.Success,

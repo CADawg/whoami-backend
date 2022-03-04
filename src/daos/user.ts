@@ -64,9 +64,9 @@ async function emailIsTaken(email: string): Promise<boolean> {
  * @param username The username of the user.
  * @param password The user's hash of their password (which acts like their password)
  * @param email The user's email.
- * @param encryptedShare The user's encrypted share.
+ * @param encryptedShares[] The user's encrypted shares.
  */
-async function createUserByUsername(username: string, password: string, email: string, encryptedShare: string):Promise<UserCreationStatus> {
+async function createUserByUsername(username: string, password: string, email: string, encryptedShares: string[]):Promise<UserCreationStatus> {
     // Lowercase all login details, to reduce user errors.
     username = username.toLowerCase();
 
@@ -104,14 +104,22 @@ async function createUserByUsername(username: string, password: string, email: s
         // Insert the user into the database.
         const [userResult] = await dbPool.query(`INSERT INTO users (username, password, email, share_count)
                                                  VALUES (?, ?, ?,
-                                                         ?)`, [username, hashedPassword, email, 1]);
+                                                         ?)`, [username, hashedPassword, email, 2]);
 
         // If we received an OK Response, and one row was affected. (The user was created)
         if (isOkPacket(userResult) && userResult.affectedRows === 1) {
+            // Map shares into database format (userId, share, userId)
+            const sharesToInsert = encryptedShares.map((share) => {
+                return [
+                    userResult.insertId,
+                    share,
+                    userResult.insertId
+                ];
+            });
+
             // Now we need to add the shamir share to the database. (This is what encrypts the data of the user)
             const [shamirResult] = await dbPool.query(`INSERT INTO shamir_shares (encrypted_by, share_value, applies_to)
-                                                       VALUES (?, ?,
-                                                               ?)`, [userResult.insertId, encryptedShare, userResult.insertId]);
+                                                       VALUES ?`, sharesToInsert);
 
             if (isOkPacket(shamirResult) && shamirResult.affectedRows === 1) {
                 return UserCreationStatus.Success;
