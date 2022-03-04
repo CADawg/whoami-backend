@@ -39,7 +39,7 @@ if (process.env.NODE_ENV === 'production') {
  **********************************************************************************/
 
 // Add api router
-app.use('/api', apiRouter);
+app.use('/api/v1', apiRouter);
 
 // Error handling
 app.use((err: Error | CustomError, _: Request, res: Response, __: NextFunction) => {

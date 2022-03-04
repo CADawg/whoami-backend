@@ -4,7 +4,8 @@ enum UserCreationStatus {
     EmailTaken,
     UsernameTaken,
     InvalidUsername,
-    InvalidEmail
+    InvalidEmail,
+    InvalidPasswordHashing
 }
 
 export {UserCreationStatus};

@@ -39,9 +39,14 @@ loginRouter.post('/sign_up', async (req, res) => {
         // This ensures that we can NEVER skip validation
         const userCreationStatus = await createUserByUsername(req.body.username, req.body.password, req.body.email, req.body.encryptedShare);
 
-        res.json({
+        return res.json({
             success: userCreationStatus === UserCreationStatus.Success,
             message: getUserCreationStatusMessage(userCreationStatus)
+        });
+    } else {
+        return res.json({
+            success: false,
+            message: 'Missing required fields'
         });
     }
 });

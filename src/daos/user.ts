@@ -2,7 +2,7 @@ import {IUser} from "@models/user-model";
 import {dbPool} from "@daos/database";
 import {OkPacket, RowDataPacket} from "mysql2";
 import {hash} from "@node-rs/argon2";
-import {emailRegex, usernameRegex} from "@shared/regex";
+import {emailRegex, sha512Regex, usernameRegex} from "@shared/regex";
 import {UserCreationStatus} from "@shared/enums";
 
 // The type for all rows.
@@ -80,6 +80,11 @@ async function createUserByUsername(username: string, password: string, email: s
         return UserCreationStatus.InvalidEmail;
     }
 
+    // Check the password is hashed with sha512.
+    if (password.match(sha512Regex) === null) {
+        return UserCreationStatus.InvalidPasswordHashing;
+    }
+
     // Validate if the username is already taken.
     if (await usernameIsTaken(username)) {
         return UserCreationStatus.UsernameTaken;
@@ -99,7 +104,7 @@ async function createUserByUsername(username: string, password: string, email: s
         // Insert the user into the database.
         const [userResult] = await dbPool.query(`INSERT INTO users (username, password, email, share_count)
                                                  VALUES (?, ?, ?,
-                                                         ?)`, [username, hashedPassword, email, encryptedShare]);
+                                                         ?)`, [username, hashedPassword, email, 1]);
 
         // If we received an OK Response, and one row was affected. (The user was created)
         if (isOkPacket(userResult) && userResult.affectedRows === 1) {
@@ -118,7 +123,8 @@ async function createUserByUsername(username: string, password: string, email: s
                 return UserCreationStatus.Failed;
             }
         }
-    } catch {
+    } catch (e){
+        console.log(e);
         return UserCreationStatus.Failed;
     }
 

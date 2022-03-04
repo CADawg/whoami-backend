@@ -14,6 +14,8 @@ function getUserCreationStatusMessage(status: UserCreationStatus) {
       return 'Username is invalid';
     case UserCreationStatus.InvalidEmail:
       return 'Email is invalid';
+    case UserCreationStatus.InvalidPasswordHashing:
+      return 'Your password was not submitted successfully';
     default:
       return 'User creation failed';
   }
