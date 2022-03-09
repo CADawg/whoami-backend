@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import {createUserByUsername, emailIsTaken, getUserByUsername, usernameIsTaken} from "@daos/user";
+import {
+    createUserByUsername,
+    emailIsTaken,
+    getUserByUsername, sendVerificationEmail, updateEmail,
+    usernameIsTaken
+} from "@daos/user";
 import {verify} from "@node-rs/argon2";
 import {emailRegex, usernameRegex} from "@shared/regex";
 import {getUserCreationStatusMessage} from "@shared/functions";
@@ -38,6 +43,12 @@ loginRouter.post('/sign_up', async (req, res) => {
         // We don't validate as all the validation is done inside the createUserByUsername function
         // This ensures that we can NEVER skip validation
         const userCreationStatus = await createUserByUsername(req.body.username, req.body.password, req.body.email, req.body.encryptedShares);
+
+        if (userCreationStatus === UserCreationStatus.Success) {
+            if (req.session) req.session.user = req.body.username.toLowerCase();
+
+            await sendVerificationEmail(await getUserByUsername(req.body.username.toLowerCase()));
+        }
 
         return res.json({
             success: userCreationStatus === UserCreationStatus.Success,
@@ -104,6 +115,137 @@ loginRouter.post('/validate/email', async (req, res) => {
             message: 'Email is required'
         });
     }
+});
+
+/**
+ * This route checks whether a user has already verified their email address
+ * Success = true if the request was successful
+ * data.verified = true if the user has verified their email address
+ * message = A descriptive message
+ */
+loginRouter.post("/is_email_verified", async (req, res) => {
+    if (req.session && req.session.user) {
+        const user = await getUserByUsername(req.session.user);
+
+        if (user) {
+            if (user.email_verified) {
+                return res.json({
+                    success: true,
+                    data: {verified: true, email: user.email},
+                    message: 'Email is verified'
+                });
+            } else {
+                return res.json({
+                    success: true,
+                    data: {verified: false, email: user.email},
+                    message: 'Email is not verified',
+                });
+            }
+        } else {
+            return res.json({
+                success: false,
+                message: "User not found",
+                data: {verified: false, email: ""}
+            });
+        }
+    } else {
+        return res.json({
+            success: false,
+            message: "User not found",
+            data: {verified: false, email: ""}
+        });
+    }
+});
+
+loginRouter.post("/update_email", async (req, res) => {
+    // Update the session.user's email address
+    if (req.session && req.session.user && req.body.email) {
+        const user = await getUserByUsername(req.session.user);
+
+        if (user) {
+            if (req.body.email.match(emailRegex) === null) {
+                return res.json({
+                    success: false,
+                    message: 'Email is invalid'
+                });
+            }
+
+            if (await emailIsTaken(req.body.email) && user.email !== req.body.email) return res.json({
+                success: false,
+                message: 'Email is taken'
+            }); // don't update if the email is already taken
+
+            const emailUpdate = await updateEmail(user.username, req.body.email);
+
+            if (emailUpdate) {
+                return res.json({
+                    success: true,
+                    message: 'Email updated'
+                });
+            } else {
+                return res.json({
+                    success: false,
+                    message: 'Email update failed'
+                });
+            }
+        } else {
+            return res.json({
+                success: false,
+                message: "User not found"
+            });
+        }
+    } else {
+        return res.json({
+            success: false,
+            message: "User not found"
+        });
+    }
+});
+
+loginRouter.post('/verify_email', async (req, res) => {
+    if (req.session && req.session.user) {
+        const user = await getUserByUsername(req.session.user);
+
+        if (user && user.email_verified) {
+            return res.json({
+                success: true,
+                message: 'Email is already verified'
+            });
+        }
+
+        if (user) {
+            const verificationEmailSent = await sendVerificationEmail(user);
+
+            if (verificationEmailSent) {
+                return res.json({
+                    success: true,
+                    message: 'Email verification sent'
+                });
+            } else {
+                return res.json({
+                    success: false,
+                    message: 'Could not send verification email'
+                });
+            }
+        } else {
+            return res.json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+    } else {
+        return res.json({
+            success: false,
+            message: 'User is not logged in'
+        });
+    }
+});
+
+loginRouter.post('/logout', (req, res) => {
+    if (req.session) req.session.destroy(() => {});
+    return res.json({
+        success: true
+    });
 });
 
 // Export default.

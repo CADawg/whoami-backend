@@ -2,16 +2,22 @@ import cookieParser from 'cookie-parser';
 import morgan from 'morgan';
 import path from 'path';
 import helmet from 'helmet';
+import session from 'express-session';
+const MySQLStore = require('express-mysql-session')(session);
 
 import express, { NextFunction, Request, Response } from 'express';
 import 'express-async-errors';
 
 import apiRouter from './routes/api';
 import { CustomError } from '@shared/errors';
+import {dbPool} from "@daos/database";
 
 
 // Constants
 const app = express();
+
+// Database Session Store with our dbPool
+const sessionStore = new MySQLStore({}, dbPool);
 
 
 /***********************************************************************************
@@ -22,6 +28,14 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({extended: true}));
 app.use(cookieParser());
+// noinspection SpellCheckingInspection
+app.use(session({
+    secret: process.env.SESSION_SECRET as string,
+    saveUninitialized: true,
+    store: sessionStore,
+    resave: false,
+    cookie: {httpOnly: true, secure: process.env.NODE_ENV === 'production'},
+}));
 
 // Show routes called in console during development
 if (process.env.NODE_ENV === 'development') {
@@ -32,6 +46,12 @@ if (process.env.NODE_ENV === 'development') {
 if (process.env.NODE_ENV === 'production') {
     app.use(helmet());
 }
+
+/***********************************************************************************
+ *                         Reverse Proxy Support (Caddy)
+ **********************************************************************************/
+// Trust first proxy in production
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
 
 
 /***********************************************************************************
