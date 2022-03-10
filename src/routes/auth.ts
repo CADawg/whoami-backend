@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import {
     createUserByUsername,
-    emailIsTaken,
-    getUserByUsername, sendVerificationEmail, updateEmail,
+    emailIsTaken, getUserByUserId,
+    getUserByUsername, getUserPersonalShares, sendVerificationEmail, tryVerifyEmail, updateEmail,
     usernameIsTaken
 } from "@daos/user";
 import {verify} from "@node-rs/argon2";
@@ -16,11 +16,18 @@ const loginRouter = Router();
 loginRouter.post('/sign_in', async (req, res) => {
   if (req.body.username && req.body.password) {
       const user = await getUserByUsername(req.body.username);
+
+      const shares = await getUserPersonalShares(user)
+
       try {
-          if (user && await verify(user.password, req.body.password)) {
+          // We can put shares in here as if the user is not null, shares will not be null either
+          if (user && shares && await verify(user.password, req.body.password)) {
+              if (req.session) req.session.user = user.username;
+
               res.json({
                   success: true,
-                  user: user
+                  data: {emailVerified: user.email_verified, shares},
+                  message: 'User logged in successfully'
               });
           } else {
               res.json({
@@ -153,6 +160,51 @@ loginRouter.post("/is_email_verified", async (req, res) => {
             success: false,
             message: "User not found",
             data: {verified: false, email: ""}
+        });
+    }
+});
+
+//returns {success: boolean, message: string, data: {verified: boolean}}
+loginRouter.post('/verify_email_code_status', async (req, res) => {
+    if (req.body.email && req.body.code) {
+        const decodedEmail = Buffer.from(req.body.email, 'base64url').toString('utf8');
+
+        const status = await tryVerifyEmail(decodedEmail, req.body.code);
+
+        if (status[0]) {
+            const user = await getUserByUserId(status[1]);
+            if (user) {
+
+                let isThisUser = false;
+                if (req.session && req.session.user) {
+                    isThisUser = req.session.user === user.username;
+                }
+
+                return res.json({
+                    success: true,
+                    message: 'Email verified',
+                    data: {verified: true, isThisUser}
+                });
+            } else {
+                return res.json({
+                    success: true,
+                    message: 'Email verified, but user not found',
+                    data: {verified: true, isThisUser: false}
+                });
+            }
+
+        } else {
+            return res.json({
+                success: false,
+                message: 'Email not verified',
+                data: {verified: false, isThisUser: false}
+            });
+        }
+
+    } else {
+        return res.json({
+            success: false,
+            message: 'Missing required fields'
         });
     }
 });

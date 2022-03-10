@@ -1,4 +1,4 @@
-import {IUser} from "@models/user-model";
+import {IUser} from "@models/user_model";
 import {dbPool} from "@daos/database";
 import {OkPacket, RowDataPacket} from "mysql2";
 import {hash} from "@node-rs/argon2";
@@ -6,6 +6,8 @@ import {emailRegex, sha512Regex, usernameRegex} from "@shared/regex";
 import {UserCreationStatus} from "@shared/enums";
 import crypto from 'crypto';
 import sendEmail from "@shared/mailer";
+import {EmailVerificationRow} from "@models/email_verification_model";
+import {SharesRow} from "@models/shares_model";
 
 // The type for all rows.
 type RowOrRows = RowDataPacket[] | RowDataPacket[][];
@@ -92,6 +94,54 @@ async function emailIsTaken(email: string): Promise<boolean> {
     return isRowOrRows(data) && data.length === 1;
 }
 
+// Takes an email and code, checks it against the database with mysql2 and returns true if the email is now verified.
+async function tryVerifyEmail(email: string, code: string): Promise<[true, number]|[false]> {
+    const [data] = await dbPool.query(`SELECT * FROM email_verification WHERE email = ? AND verification_code = ?`, [email, code]);
+
+    // If we received data, and there is one email verification line.
+    if (isRowOrRows(data) && data.length === 1) {
+        // We can now verify the user's email.
+
+        const emailVerificationRow = data[0] as EmailVerificationRow;
+
+        // Set the user's email to verified. (Set their email too so they can't change it and then verify a different email.)
+        const [updateResult] = await dbPool.query(`UPDATE users SET email_verified = 1, email = ? WHERE user_id = ?`, [emailVerificationRow.email ,emailVerificationRow.user_id]);
+
+        if (isOkPacket(updateResult) && updateResult.affectedRows === 1) {
+            // Invalidate all of this user's email verification codes.
+            await dbPool.query(`DELETE FROM email_verification WHERE user_id = ?`, [emailVerificationRow.user_id]);
+
+            return [true, emailVerificationRow.user_id];
+        }
+    }
+
+    return [false];
+}
+
+function isNumber(num: any): num is number {
+    return typeof num === 'number';
+}
+
+async function getUserPersonalShares(user: IUser | number | null):Promise<[number, string[]]|null> {
+    let shares = [];
+
+    if (isNumber(user)) user = await getUserByUserId(user);
+
+    if (user === null) return null;
+
+    const [data] = await dbPool.query(`SELECT * FROM shamir_shares WHERE applies_to = ? and encrypted_by = ?`, [user.user_id, user.user_id]);
+
+    if (isRowOrRows(data)) {
+        for (let i = 0; i < data.length; i++) {
+            const share = data[i] as SharesRow;
+
+            shares.push(share.share_value);
+        }
+    }
+
+    return [user.share_count, shares];
+}
+
 async function sendVerificationEmail(user: IUser | null): Promise<boolean> {
     if (user === null) return false;
 
@@ -101,7 +151,7 @@ async function sendVerificationEmail(user: IUser | null): Promise<boolean> {
         return await sendEmail("transactional", {
             header: "Verify your email",
             text: "Thank you for joining WhoAmI. Please verify your email to start securing your data by clicking the link below.",
-            c2a_link: (process.env.NODE_ENV !== "production" ? process.env.DEVELOPMENT_FRONTEND_URL : process.env.PRODUCTION_FRONTEND_URL) + "/verify_email?code=" + verificationCode + "&email=" + Buffer.from(user.email).toString('base64url'),
+            c2a_link: (process.env.NODE_ENV !== "production" ? process.env.DEVELOPMENT_FRONTEND_URL : process.env.PRODUCTION_FRONTEND_URL) + "/auth/verify/email/callback/" + verificationCode + "/" + Buffer.from(user.email).toString('base64url'),
             c2a_button: "Verify your email",
         }, "Please verify your email for WhoAmI", `"${user.username}" ${user.email}`, '"WhoAmI" <noreply@d.elive.red>');
     }
@@ -220,5 +270,7 @@ export {
     getVerificationCodeForUser,
     updateEmail,
     sendVerificationEmail,
-    getUserByUserId
+    getUserByUserId,
+    tryVerifyEmail,
+    getUserPersonalShares
 };
