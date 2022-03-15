@@ -294,10 +294,38 @@ loginRouter.post('/verify_email', async (req, res) => {
 });
 
 loginRouter.post('/logout', (req, res) => {
-    if (req.session) req.session.destroy(() => {});
-    return res.json({
-        success: true
+    if (req.session) req.session.destroy(() => {
+        return res.json({
+            success: true
+        });
     });
+});
+
+loginRouter.post('/username', async (req, res) => {
+    if (req.session && req.session.user) {
+        const user = await getUserByUserId(req.session.user);
+
+        if (user !== null) {
+            return res.json({
+                success: true,
+                message: 'User is logged in',
+                data: {
+                    username: req.session.user,
+                    isVerified: user.email_verified === 1
+                }
+            });
+        } else {
+            return res.json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+    } else {
+        return res.json({
+            success: false,
+            message: 'User is not logged in'
+        });
+    }
 });
 
 // Export default.
