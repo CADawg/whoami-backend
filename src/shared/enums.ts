@@ -5,7 +5,8 @@ enum UserCreationStatus {
     UsernameTaken,
     InvalidUsername,
     InvalidEmail,
-    InvalidPasswordHashing
+    InvalidPasswordHashing,
+    InvalidPrivateKey
 }
 
 export {UserCreationStatus};

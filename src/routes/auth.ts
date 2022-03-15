@@ -26,7 +26,7 @@ loginRouter.post('/sign_in', async (req, res) => {
 
               res.json({
                   success: true,
-                  data: {emailVerified: user.email_verified, shares},
+                  data: {emailVerified: user.email_verified, shares, keypair: {publicKey: user.public_key, encryptedPrivateKey: user.private_key}},
                   message: 'User logged in successfully'
               });
           } else {
@@ -46,10 +46,10 @@ loginRouter.post('/sign_in', async (req, res) => {
 
 loginRouter.post('/sign_up', async (req, res) => {
     // Validate that the body contains the required fields
-    if (req.body.username && req.body.password && req.body.email && req.body.encryptedShares) {
+    if (req.body.username && req.body.password && req.body.email && req.body.encryptedShares && req.body.encryptedPrivateKey && req.body.publicKey) {
         // We don't validate as all the validation is done inside the createUserByUsername function
         // This ensures that we can NEVER skip validation
-        const userCreationStatus = await createUserByUsername(req.body.username, req.body.password, req.body.email, req.body.encryptedShares);
+        const userCreationStatus = await createUserByUsername(req.body.username, req.body.password, req.body.email, req.body.encryptedShares, req.body.encryptedPrivateKey, req.body.publicKey);
 
         if (userCreationStatus === UserCreationStatus.Success) {
             if (req.session) req.session.user = req.body.username.toLowerCase();
@@ -303,7 +303,7 @@ loginRouter.post('/logout', (req, res) => {
 
 loginRouter.post('/username', async (req, res) => {
     if (req.session && req.session.user) {
-        const user = await getUserByUserId(req.session.user);
+        const user = await getUserByUsername(req.session.user);
 
         if (user !== null) {
             return res.json({

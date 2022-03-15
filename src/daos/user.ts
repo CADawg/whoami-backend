@@ -185,9 +185,11 @@ async function updateEmail(username: string, email: string): Promise<boolean> {
  * @param username The username of the user.
  * @param password The user's hash of their password (which acts like their password)
  * @param email The user's email.
+ * @param encryptedPrivateKey The user's encrypted private key.
+ * @param publicKey The user's public key.
  * @param encryptedShares[] The user's encrypted shares.
  */
-async function createUserByUsername(username: string, password: string, email: string, encryptedShares: string[]):Promise<UserCreationStatus> {
+async function createUserByUsername(username: string, password: string, email: string, encryptedShares: string[], encryptedPrivateKey: string, publicKey: string):Promise<UserCreationStatus> {
     // Lowercase all login details, to reduce user errors.
     username = username.toLowerCase();
 
@@ -216,6 +218,10 @@ async function createUserByUsername(username: string, password: string, email: s
         return UserCreationStatus.EmailTaken;
     }
 
+    if (encryptedPrivateKey.length === 0 || publicKey.length === 0) {
+        return UserCreationStatus.InvalidPrivateKey;
+    }
+
 
     try {
         // Hash the already hashed password (hashed on the client side, so we never know the password).
@@ -223,9 +229,9 @@ async function createUserByUsername(username: string, password: string, email: s
         let hashedPassword = await hash(password);
 
         // Insert the user into the database.
-        const [userResult] = await dbPool.query(`INSERT INTO users (username, password, email, share_count)
+        const [userResult] = await dbPool.query(`INSERT INTO users (username, password, email, share_count, public_key, private_key)
                                                  VALUES (?, ?, ?,
-                                                         ?)`, [username, hashedPassword, email, 2]);
+                                                         ?, ?, ?)`, [username, hashedPassword, email, 2, publicKey, encryptedPrivateKey]);
 
 
         // If we received an OK Response, and one row was affected. (The user was created)

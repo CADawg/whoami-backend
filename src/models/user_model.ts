@@ -6,4 +6,6 @@ export interface IUser {
     password: string;
     share_count: number;
     email_verified: number;
+    public_key: string;
+    private_key: string;
 }
