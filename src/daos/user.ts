@@ -1,6 +1,5 @@
 import {IUser} from "@models/user_model";
 import {dbPool} from "@daos/database";
-import {OkPacket, RowDataPacket} from "mysql2";
 import {hash} from "@node-rs/argon2";
 import {emailRegex, sha512Regex, usernameRegex} from "@shared/regex";
 import {UserCreationStatus} from "@shared/enums";
@@ -8,21 +7,7 @@ import crypto from 'crypto';
 import sendEmail from "@shared/mailer";
 import {EmailVerificationRow} from "@models/email_verification_model";
 import {SharesRow} from "@models/shares_model";
-
-// The type for all rows.
-type RowOrRows = RowDataPacket[] | RowDataPacket[][];
-
-/**
- * Checks whether a MYSQL query returns a row or rows.
- */
-function isRowOrRows(toBeDetermined: any): toBeDetermined is RowOrRows {
-    return (toBeDetermined as RowOrRows).length !== undefined;
-}
-
-// Checks whether a MYSQL query returns an OkPacket.
-function isOkPacket(toBeDetermined: any): toBeDetermined is OkPacket {
-    return (toBeDetermined as OkPacket).affectedRows !== undefined;
-}
+import {isOkPacket, isRowOrRows} from "@shared/guards";
 
 /**
  * Get one user.
