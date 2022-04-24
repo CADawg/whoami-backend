@@ -29,6 +29,21 @@ async function getUserByUsername(username: string): Promise<IUser | null> {
     return null;
 }
 
+async function getUserByEmail(email: string): Promise<IUser | null> {
+    // Set the email to lowercase.
+    email = email.toLowerCase();
+
+    const [data] = await dbPool.query(`SELECT * FROM users WHERE LOWER(email) = ?`, [email]);
+
+    // If we received data, and there is one user with this name.
+    if (isRowOrRows(data) && data.length === 1) {
+        // Return as a user object
+        return data[0] as IUser;
+    }
+
+    return null;
+}
+
 async function getUserByUserId(userId: number): Promise<IUser | null> {
     const [data] = await dbPool.query(`SELECT * FROM users WHERE user_id = ?`, [userId]);
 
@@ -263,5 +278,6 @@ export {
     sendVerificationEmail,
     getUserByUserId,
     tryVerifyEmail,
+    getUserByEmail,
     getUserPersonalShares
 };
