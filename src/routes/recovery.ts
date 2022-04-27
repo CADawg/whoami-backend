@@ -1,10 +1,10 @@
 import express from 'express';
-import {getUserByEmail, getUserByUserId, getUserByUsername} from "@daos/user";
+import {getUserByEmail, getUserByUsername} from "@daos/user";
 import {dbPool} from "@daos/database";
 import {isOkPacket, isRowOrRows} from "@shared/guards";
 const router = express.Router();
 
-router.get('/publickey', async (req, res) => {
+router.post('/publickey', async (req, res) => {
   if (req.body.email) {
       const user = await getUserByEmail(req.body.email);
 
@@ -19,7 +19,39 @@ router.get('/publickey', async (req, res) => {
               message: 'User not found'
           });
       }
+  } else {
+      res.json({
+          success: false,
+          message: 'Email not provided'
+      });
   }
+});
+
+router.delete('/deleteTrusted', async (req, res) => {
+    if (req.body.requestId) {
+        const user = await getUserByUsername(req.session?.user);
+
+        if (user) {
+            const [result] = await dbPool.query(`DELETE FROM recovery WHERE from_id = ? AND recovery_id = ?`, [user.user_id, req.body.requestId]);
+
+            if (isOkPacket(result)) {
+                res.json({
+                    success: true,
+                    message: 'Trusted user deleted'
+                });
+            } else {
+                res.json({
+                    success: false,
+                    message: 'Trusted user not deleted'
+                });
+            }
+        } else {
+            res.json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+    }
 });
 
 // add recovery agent
@@ -63,6 +95,35 @@ router.post('/addTrusted', async (req, res) => {
     }
 });
 
+// get the user's trusted parties (from_id)
+router.get('/getTrusted', async (req, res) => {
+    if (req.session && req.session.user) {
+        const user = await getUserByUsername(req.session.user);
+
+        if (!user) {
+            return res.json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // get the user's trusted parties
+        const [response] = await dbPool.query("SELECT *, (select email from users WHERE user_id=recovery.to_id) as email FROM recovery WHERE from_id = ?", [user.user_id]);
+
+        if (isRowOrRows(response)) {
+            return res.json({
+                success: true,
+                trusted: response
+            });
+        } else {
+            return res.json({
+                success: false,
+                message: 'No trusted parties'
+            });
+        }
+    }
+});
+
 // get all recovery requests with the signed in user as the to_id
 router.get('/getRecoveryRequests', async (req, res) => {
     if (req.session && req.session.user) {
@@ -75,9 +136,9 @@ router.get('/getRecoveryRequests', async (req, res) => {
             });
         }
 
-        const [response] = await dbPool.query("SELECT * FROM recovery WHERE to_id = ?", [user.user_id]);
+        const [response] = await dbPool.query("SELECT *, (select email from users WHERE user_id=recovery.from_id) as email FROM recovery WHERE to_id = ?", [user.user_id]);
 
-        if (isOkPacket(response)) {
+        if (isRowOrRows(response)) {
             return res.json({
                 success: true,
                 requests: response
@@ -174,12 +235,13 @@ router.post('/startRecovery', async (req, res) => {
         }
 
 
-        const [response] = await dbPool.query("INSERT INTO recovery_process (recoverer_id, account_to_recover, public_key, private_key, new_password_hash) VALUES (?, ?, ?, ?, ?)", [accountRecover.user_id, req.body.publicKey, req.body.privateKey, req.body.newPasswordHash]);
+        const [response] = await dbPool.query("INSERT INTO recovery_process (account_to_recover, public_key, private_key, new_password_hash) VALUES (?, ?, ?, ?)", [accountRecover.user_id, req.body.publicKey, req.body.privateKey, req.body.newPasswordHash]);
 
         if (isOkPacket(response) && response.affectedRows === 1) {
             return res.json({
                 success: true,
-                message: 'Recovery process started'
+                message: 'Recovery process started',
+                id: response.insertId
             });
         } else {
             return res.json({
@@ -203,9 +265,48 @@ router.get('/getRecoveryProcess', async (req, res) => {
             });
         }
 
-        const [response] = await dbPool.query("SELECT * FROM `recovery_process` LEFT JOIN recovery ON recovery_process.account_to_recover = recovery.from_id WHERE accepted = 1 and (select count(*) from recovery_process_replacement_shares WHERE given_by = ?) < 1 and to_id = ?;", [user.user_id, user.user_id]);
+        const [response] = await dbPool.query("SELECT *,(select email from users WHERE user_id=recovery_process.account_to_recover) as email FROM `recovery_process` LEFT JOIN recovery ON recovery_process.account_to_recover = recovery.from_id WHERE accepted = 1 and (select count(*) from recovery_process_replacement_shares WHERE given_by = ?) < 1 and to_id = ?;", [user.user_id, user.user_id]);
 
-        if (isOkPacket(response)) {
+        if (isRowOrRows(response)) {
+            return res.json({
+                success: true,
+                data: response
+            });
+        } else {
+            return res.json({
+                success: false,
+                message: 'Recovery process not found'
+            });
+        }
+    }
+
+    return res.json({
+        success: false,
+        message: 'Invalid request'
+    });
+});
+
+router.post('/getBackupShare', async (req, res) => {
+    if (req.session && req.session.user) {
+        const user = await getUserByUsername(req.session.user);
+
+        if (!user) {
+            return res.json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        if (!req.body.from) {
+            return res.json({
+                success: false,
+                message: 'Invalid request'
+            });
+        }
+
+        const [response] = await dbPool.query("SELECT * FROM `recovery` WHERE to_id = ? and from_id = ? LIMIT 1", [user.user_id, req.body.from]);
+
+        if (isRowOrRows(response)) {
             return res.json({
                 success: true,
                 data: response
@@ -283,7 +384,7 @@ router.get('/getReplacementShares', async (req, res) => {
 });
 
 // Get shares so that the user can decrypt and reencrypt them
-router.get("/recoveryDetails", async (req, res) => {
+router.post("/recoveryDetails", async (req, res) => {
     if (!req.body.recoveryUserId) {
         return res.json({
             success: false,
@@ -291,9 +392,9 @@ router.get("/recoveryDetails", async (req, res) => {
         });
     }
 
-    const [response] = await dbPool.query("SELECT * FROM `recovery_process_replacement_shares` WHERE recovery_user_id = ?", [req.body.recoveryUserId]);
+    const [response] = await dbPool.query("SELECT * FROM `recovery_process_replacement_shares` WHERE (select account_to_recover from recovery_process WHERE recoverer_id = ?) = recovery_process_replacement_shares.recovery_user_id;", [req.body.recoveryUserId]);
 
-    if (isOkPacket(response)) {
+    if (isRowOrRows(response)) {
         return res.json({
             success: true,
             data: response
@@ -331,7 +432,7 @@ router.post("/completeRecovery", async (req, res) => {
         const user = recoveryUser[0] as {new_password_hash: string, account_to_recover: number};
 
 
-        const [updateUser] = await dbPool.query("UPDATE `users` SET password=?", [user.new_password_hash]);
+        const [updateUser] = await dbPool.query("UPDATE `users` SET password=? WHERE user_id=?", [user.new_password_hash, req.body.recoveryUserId]);
 
         if (isOkPacket(updateUser) && updateUser.affectedRows === 1) {
             // update shares
@@ -339,11 +440,13 @@ router.post("/completeRecovery", async (req, res) => {
             // delete all shares where encrypted by and applies_to are user.account_to_recover
             const [deleteShares] = await dbPool.query("DELETE FROM `shamir_shares` WHERE encrypted_by = ? AND applies_to = ?;", [user.account_to_recover, user.account_to_recover]);
 
-            if (isOkPacket(deleteShares) && deleteShares.affectedRows > 1) {
+
+
+            if (isOkPacket(deleteShares)) {
                 // insert new shares
 
-                const [insertShare1] = await dbPool.query("INSERT INTO `shamir_shares` (encrypted_by, applies_to, share) VALUES (?,?,?);", [user.account_to_recover, user.account_to_recover, req.body.replacementShares[0]]);
-                const [insertShare2] = await dbPool.query("INSERT INTO `shamir_shares` (encrypted_by, applies_to, share) VALUES (?,?,?);", [user.account_to_recover, user.account_to_recover, req.body.replacementShares[1]]);
+                const [insertShare1] = await dbPool.query("INSERT INTO `shamir_shares` (encrypted_by, applies_to, share_value) VALUES (?,?,?);", [user.account_to_recover, user.account_to_recover, req.body.replacementShares[0]]);
+                const [insertShare2] = await dbPool.query("INSERT INTO `shamir_shares` (encrypted_by, applies_to, share_value) VALUES (?,?,?);", [user.account_to_recover, user.account_to_recover, req.body.replacementShares[1]]);
 
                 if (isOkPacket(insertShare1) && isOkPacket(insertShare2)) {
                     // delete recovery data
