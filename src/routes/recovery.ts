@@ -2,7 +2,9 @@ import express from 'express';
 import {getUserByEmail, getUserByUsername} from "@daos/user";
 import {dbPool} from "@daos/database";
 import {isOkPacket, isRowOrRows} from "@shared/guards";
+import argon2 from '@node-rs/argon2';
 const router = express.Router();
+
 
 router.post('/publickey', async (req, res) => {
   if (req.body.email) {
@@ -234,8 +236,10 @@ router.post('/startRecovery', async (req, res) => {
             });
         }
 
+        const argonHashedPassword = await argon2.hash(req.body.newPasswordHash);
 
-        const [response] = await dbPool.query("INSERT INTO recovery_process (account_to_recover, public_key, private_key, new_password_hash) VALUES (?, ?, ?, ?)", [accountRecover.user_id, req.body.publicKey, req.body.privateKey, req.body.newPasswordHash]);
+
+        const [response] = await dbPool.query("INSERT INTO recovery_process (account_to_recover, public_key, private_key, new_password_hash) VALUES (?, ?, ?, ?)", [accountRecover.user_id, req.body.publicKey, req.body.privateKey, argonHashedPassword]);
 
         if (isOkPacket(response) && response.affectedRows === 1) {
             return res.json({
